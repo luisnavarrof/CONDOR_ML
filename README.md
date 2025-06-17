@@ -1,79 +1,138 @@
-# Cosmic Ray Classification and Angular Reconstruction (CONDOR)
+# Cosmic Ray Classification, Energy Inference and Angular Reconstruction (CONDOR)
 
-This repository contains code to process simulation data of cosmic ray showers (photons and protons) and train machine learning models for both classifying the type of cosmic ray and reconstructing the incidence angle of these particles.
+This repository contains code to process simulated cosmic ray shower data (from CORSIKA) and train a deep learning model for **multi-task learning**:  
+- **Classifying the primary particle** (photon vs proton),  
+- **Inferring the energy class** (binary), and  
+- **Reconstructing the zenith angle** of the cosmic ray.
 
-## Repository Structure
+---
 
-The repository is organized into the following main folders:
+## 🚀 Key Features (Updated)
 
-* **CONDOR Angular Reconstruction:** Contains the codes to train and evaluate models for angular reconstruction and cosmic ray classification.
-* **CONDOR Binary Translation, Data Processing and Visualization:** Contains codes to process simulation data in DAT format, preprocess data, and visualize results.
+- **Raw Sequence-Based Input**: Each input sequence corresponds to a unique particle shower and preserves its temporal-spatial structure. All sequences are padded with zeros based on the longest sequence, ensuring consistency without mixing data from different events.
 
-## Folder Contents
+- **Feature Normalization**:
+  - `x`, `y` spatial coordinates are scaled with `MinMaxScaler`.
+  - `t` (arrival time) is scaled with `StandardScaler` to preserve physical significance.
 
-### CONDOR Angular Reconstruction
+- **Updated Model Architecture**:
+  - Replaces previous Conv1D+LSTM hybrid with a **deep Conv1D stack** of 5 layers followed by **Multi-Head Attention**.
+  - Three output branches: particle classification, energy classification, and angle regression.
+  - Each branch includes skip connections, dense layers, normalization, and dropout for robustness.
 
-* **model.py / model.ipynb:**
-    * This code implements a hybrid neural network model, combining 1D convolutional layers (Conv1D) and Long Short-Term Memory (LSTM) networks, to classify cosmic ray particles (photon or proton) and reconstruct their incidence angle.
-    * **Main functionality:**
-        * Loads preprocessed data from CSV files, which include information about the position, time, energy, and type of particles.
-        * Normalizes the data using `MinMaxScaler`.
-        * Defines and compiles a hybrid model that uses Conv1D layers to extract spatial patterns and LSTM layers to model temporal dependencies. The model has two outputs: one for particle type classification (using a sigmoid activation function) and the other for angle regression (using a linear activation function).
-        * Trains the model using the training data and validates its performance with a validation set.
-        * Saves the trained model and prediction statistics to CSV files.
-        * Generates plots to visualize the model's results, including angular reconstruction and the confusion matrix for particle classification.
-    * **Dependencies:** TensorFlow, pandas, numpy, scikit-learn, matplotlib.
+- **Unified Modeling & Visualization**:
+  - All model training, prediction, evaluation, and plotting are handled in a single notebook: `CNN_Transformer.ipynb`.
 
-### CONDOR Binary Translation, Data Processing and Visualization
+---
 
-* **ReadBinary.py:**
-    * This code is responsible for reading simulation data files in DAT format, which contain information about cosmic ray showers.
-    * **Main functionality:**
-        * Reads DAT files using the `panama` library.
-        * Filters relevant particles (protons, electrons, muons, pions, kaons, etc.) based on their particle ID (pdgid).
-        * Extracts and normalizes the coordinates (x, y), time (t), and energy (E) of the particles.
-        * Filters particles that fall within the CONDOR detector area.
-        * Calculates additional metadata, such as the percentage of particles within the detector area and the shower area.
-        * Adds metadata to the data, including particle ID, incidence energy, incidence angle, and simulation number.
-        * Saves the processed data to CSV files, both in binned format (grouping particles into coordinate and time bins) and unbinned.
-        * The data is organized by particle type (photon or proton), incidence angle, and simulation number, facilitating subsequent analysis and modeling.
-    * **Dependencies:** panama, numpy, pandas, pathlib.
-* **datapreprocessing.py:** Code to visualize aspects of cosmic ray shower simulation data.
-* **models_plots.ipynb:** Notebook to visualize the results and predictions of trained models.
-* **density_plots.ipynb:** Notebook to visualize the particle density per square meter as a function of incidence angle and energy.
+## 📁 Repository Structure
 
-## Workflow
+### `CONDOR_Binary_Translation/`
 
-1.  **Data Processing (ReadBinary.py):**
-    * Simulation files in DAT format are processed using `ReadBinary.py`.
-    * The data is filtered, organized, and saved to CSV files, both in binned and unbinned formats.
-    * The data is organized by particle type (photon/proton), incidence angle, and simulation number.
+- **`ReadBinary.py`**:
+  - Parses CORSIKA `.DAT` binary simulation files using the `panama` library.
+  - Filters particles within the CONDOR detector area.
+  - Adds metadata (e.g., energy, angle, shower area).
+  - Outputs preprocessed `.csv` files for each shower (both binned and unbinned).
+  
+### `CNN_Transformer.ipynb`
 
-2.  **Preprocessing and Visualization (datapreprocessing.py, density_plots.ipynb):**
-    * `datapreprocessing.py` allows to explore and visualize specific aspects of the generated datasets.
-    * `density_plots.ipynb` generates visualizations of particle density to better understand the distribution of particle showers.
+- **Main notebook for the full modeling pipeline**:
+  - Reads the processed CSVs.
+  - Constructs padded sequences.
+  - Applies normalization.
+  - Builds and trains a multi-output neural network model.
+  - Evaluates and visualizes model performance directly within the notebook.
 
-3.  **Model Training (model.py / model.ipynb):**
-    * The processed data is used to train a hybrid Conv1D-LSTM model that learns to classify the type of cosmic ray and reconstruct the incidence angle.
-    * The model is evaluated and saved for later use.
+### `datapreprocessing.py`
 
-4.  **Results Visualization (models_plots.ipynb):**
-    * `models_plots.ipynb` is used to load the trained model and visualize its predictions and performance metrics.
+- A helper script for testing preprocessing methods on **individual showers**.  
+  *Note: Not part of the main training pipeline.*
 
-## Requirements
+---
 
-* Python 3.x
-* Libraries: pandas, numpy, scikit-learn, TensorFlow, matplotlib, panama.
+## 🧠 Model Architecture Summary
 
-## Usage
+```
+Input (padded variable-length sequence with 3 features: x_bin, y_bin, t_bin)
+│
+├── Masking (0-padding ignored)
+├── Conv1D (×5 with increasing filters: 32 → 512)
+├── Shared feature encoding
+│
+├── Particle Classification Head:    Attention → Dense → Sigmoid
+├── Energy Classification Head:      Attention → Dense → Sigmoid
+└── Angle Regression Head:           Attention → Dense → Linear
+```
 
-1.  Ensure that Python and the necessary libraries are installed.
-2.  Place the simulation files in DAT format in the input directories specified in `ReadBinary.py`.
-3.  Execute `ReadBinary.py` to process the data and generate CSV files.
-4.  Use `datapreprocessing.py` and `density_plots.ipynb` to explore and visualize the data.
-5.  Execute `model.py` or `model.ipynb` to train the model.
-6.  Use `models_plots.ipynb` to visualize the model's results.
+- Each output branch includes:
+  - `LayerNormalization`
+  - `GlobalAveragePooling1D`
+  - `Dropout`
+  - `BatchNormalization`
 
-## Contribution
+- Losses used:
+  - `BinaryCrossentropy` for both classification outputs.
+  - `MeanSquaredError (MSE)` for regression output.
 
-Contributions are welcome! If you find errors or have suggestions for improvement, feel free to create a pull request.
+---
+
+## 🔁 Workflow Summary
+
+1. **Data Generation**:
+   - Place `.DAT` CORSIKA simulations in the specified input directory.
+
+2. **Binary Translation (`ReadBinary.py`)**:
+   - Convert binary files to `.csv` with spatial, temporal and metadata fields.
+
+3. **Modeling & Visualization (`CNN_Transformer.ipynb`)**:
+   - Load CSV data.
+   - Build padded, normalized input sequences.
+   - Train the multi-output model.
+   - Evaluate and visualize predictions (F1-score, MAE, confusion matrices, angle reconstruction error, etc.).
+
+---
+
+## ⚙️ Requirements
+
+- Python 3.x  
+- Required libraries:
+  - `tensorflow`
+  - `numpy`
+  - `pandas`
+  - `scikit-learn`
+  - `matplotlib`
+  - `panama`
+
+You can install them with:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 📌 Usage
+
+1. Clone this repo.
+2. Run `ReadBinary.py` to generate structured CSVs from CORSIKA `.DAT` files.
+3. Open and run `CNN_Transformer.ipynb` for:
+   - Data preprocessing,
+   - Model training,
+   - Performance evaluation and visualization.
+
+---
+
+## 🤝 Contributions
+
+Contributions are welcome!  
+Feel free to open issues or submit pull requests with improvements, bug fixes, or suggestions.
+
+---
+
+## 📬 Contact
+
+For questions, collaboration opportunities, or academic use cases, feel free to contact:
+
+**Luis Navarro**  
+📧 luis.navarrof@usm.cl
